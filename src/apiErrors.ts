@@ -1,0 +1,46 @@
+export type ApiErrorCode =
+	| "INVALID_JSON"
+	| "INVALID_REQUEST"
+	| "MISSING_URL"
+	| "REQUEST_TOO_LARGE"
+	| "UNSUPPORTED_MEDIA_TYPE"
+	| "INVALID_URL"
+	| "INVALID_YOUTUBE_URL"
+	| "UNSUPPORTED_SOURCE"
+	| "CORS_NOT_ALLOWED"
+	| "RATE_LIMITED"
+	| "NOT_FOUND"
+	| "METHOD_NOT_ALLOWED"
+	| "EXTRACTION_NOT_CONFIGURED"
+	| "INVALID_TRANSCRIPT"
+	| "AI_PROVIDER_NOT_CONFIGURED"
+	| "AI_COST_ESTIMATE_NOT_CONFIGURED"
+	| "AI_BUDGET_NOT_CONFIGURED"
+	| "AI_BUDGET_EXHAUSTED"
+	| "USAGE_LEDGER_UNAVAILABLE"
+	| "INVALID_IDEMPOTENCY_KEY"
+	| "IDEMPOTENCY_KEY_REUSED"
+	| "AI_USAGE_ADMIN_NOT_CONFIGURED"
+	| "AI_USAGE_ADMIN_UNAUTHORIZED"
+	| "AI_USAGE_RECONCILIATION_FAILED"
+	| "AI_USAGE_RECONCILIATION_CONFLICT"
+	| "AI_PROCESSING_FAILED"
+	| "AI_TIMEOUT"
+	| "AI_RATE_LIMITED"
+	| "INVALID_RECIPE_OUTPUT"
+	| "INSUFFICIENT_RECIPE_INFORMATION"
+	| "INTERNAL_ERROR";
+
+export class ApiError extends Error {
+	constructor(
+		readonly status: number,
+		readonly code: ApiErrorCode,
+		message: string,
+		readonly retryable = false,
+		readonly retryAfterSeconds?: number,
+		readonly jobId?: string,
+		readonly usageOperationId?: string,
+	) {
+		super(message);
+	}
+}

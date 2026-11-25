@@ -1,0 +1,332 @@
+openapi: 3.1.0
+info:
+  title: GenerateRecipe API
+  version: 1.0.0
+  description: YouTube recipe preview and user-transcript processing API.
+servers:
+  - url: /
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Worker is available.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, api_version]
+                properties:
+                  status:
+                    const: ok
+                  api_version:
+                    const: v1
+  /api/v1/admin/usage:
+    get:
+      operationId: getAiUsageSummary
+      summary: Read aggregate AI usage and budget status.
+      security:
+        - aiUsageAdmin: []
+      responses:
+        "200":
+          description: Provider-separated and consolidated usage totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_version, usage]
+                properties:
+                  api_version:
+                    const: v1
+                  usage:
+                    type: object
+                    required: [budget, totals, providers, recent_jobs, recent_provider_usage]
+                    properties:
+                      budget:
+                        type: object
+                        additionalProperties: true
+                      totals:
+                        type: object
+                        additionalProperties: true
+                      providers:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                      recent_jobs:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                      recent_provider_usage:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+        "401":
+          $ref: "#/components/responses/ApiError"
+        "503":
+          $ref: "#/components/responses/ApiError"
+    post:
+      operationId: reconcileAiUsage
+      summary: Reconcile a pending provider charge after checking provider records.
+      description: >
+        Requires the admin bearer token. actual_cost_usd must be the cost
+        reported by the provider; use zero only after verifying that no charge
+        was incurred. This endpoint does not call an AI provider.
+      security:
+        - aiUsageAdmin: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operation_id, actual_cost_usd, provider_status]
+              properties:
+                operation_id:
+                  type: string
+                  format: uuid
+                actual_cost_usd:
+                  type: number
+                  minimum: 0
+                  maximum: 1000000
+                provider_status:
+                  enum: [succeeded, failed]
+      responses:
+        "200":
+          description: Pending usage reconciled and reservations updated.
+        "400":
+          $ref: "#/components/responses/ApiError"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        "404":
+          $ref: "#/components/responses/ApiError"
+        "409":
+          $ref: "#/components/responses/ApiError"
+        "503":
+          $ref: "#/components/responses/ApiError"
+  /api/v1/recipes/preview:
+    post:
+      operationId: previewRecipeSource
+      summary: Validate a YouTube URL and resolve optional metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UrlRequest"
+      responses:
+        "200":
+          description: Validated source preview.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_version, source, metadata, extraction]
+                properties:
+                  api_version:
+                    const: v1
+                  source:
+                    type: object
+                    required: [platform, original_url, normalized_url, video_id]
+                    properties:
+                      platform:
+                        const: youtube
+                      original_url:
+                        type: string
+                        format: uri
+                      normalized_url:
+                        type: string
+                        format: uri
+                      video_id:
+                        type: string
+                  metadata:
+                    type: object
+                    required: [status, video_title, creator]
+                    properties:
+                      status:
+                        enum: [available, unavailable, not_configured]
+                      video_title:
+                        type: [string, "null"]
+                      creator:
+                        type: [string, "null"]
+                  extraction:
+                    type: object
+                    required: [status]
+                    properties:
+                      status:
+                        const: not_configured
+        "400":
+          $ref: "#/components/responses/ApiError"
+        "413":
+          $ref: "#/components/responses/ApiError"
+        "422":
+          $ref: "#/components/responses/ApiError"
+  /api/v1/recipes/process:
+    post:
+      operationId: processRecipe
+      summary: Generate a recipe from a user-provided transcript.
+      description: >
+        Request bodies are limited to 256 KiB measured in UTF-8 bytes.
+        No automatic transcript extraction or audio transcription is performed.
+        An optional Idempotency-Key header should be reused for client retries;
+        a duplicate key returns 409 and does not replay a response. Keys are
+        scoped to this endpoint. Requests without one receive a unique job ID
+        for each attempt and are not deduplicated.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          description: Stable client-generated key; reuse only for retries of the same logical request.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessRecipeRequest"
+      responses:
+        "200":
+          description: Validated recipe and non-content processing metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_version, recipe, processing]
+                properties:
+                  api_version:
+                    const: v1
+                  recipe:
+                    $ref: "./recipe.v1.schema.json"
+                  processing:
+                    type: object
+                    required:
+                      [status, transcript_source, source_language, output_language, job_id, usage, cost_summary]
+                    properties:
+                      status:
+                        const: completed
+                      transcript_source:
+                        const: user_provided
+                      source_language:
+                        type: [string, "null"]
+                      output_language:
+                        const: en
+                      job_id:
+                        type: string
+                        format: uuid
+                      usage:
+                        type: object
+                        required:
+                          [provider, model, input_tokens, output_tokens, estimated_cost_usd, actual_cost_usd, status]
+                        properties:
+                          provider:
+                            const: openrouter
+                          model:
+                            type: string
+                          input_tokens:
+                            type: [integer, "null"]
+                          output_tokens:
+                            type: [integer, "null"]
+                          estimated_cost_usd:
+                            type: number
+                          actual_cost_usd:
+                            type: [number, "null"]
+                          status:
+                            enum: [reported, usage_pending]
+                      cost_summary:
+                        type: object
+                        required:
+                          [usage_operation_id, estimated_total_usd, actual_total_usd, reserved_usd, status]
+                        properties:
+                          usage_operation_id:
+                            type: string
+                            format: uuid
+                          estimated_total_usd:
+                            type: number
+                          actual_total_usd:
+                            type: [number, "null"]
+                          reserved_usd:
+                            type: number
+                          status:
+                            enum: [completed, failed, usage_pending]
+        "400":
+          $ref: "#/components/responses/ApiError"
+        "413":
+          $ref: "#/components/responses/ApiError"
+        "402":
+          $ref: "#/components/responses/ApiError"
+        "422":
+          $ref: "#/components/responses/ApiError"
+        "429":
+          $ref: "#/components/responses/ApiError"
+        "409":
+          $ref: "#/components/responses/ApiError"
+        "502":
+          $ref: "#/components/responses/ApiError"
+        "503":
+          $ref: "#/components/responses/ApiError"
+        "504":
+          $ref: "#/components/responses/ApiError"
+components:
+  securitySchemes:
+    aiUsageAdmin:
+      type: http
+      scheme: bearer
+  schemas:
+    UrlRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+    ProcessRecipeRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        fallback_transcript:
+          type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+              minLength: 1
+              description: UTF-8 byte limit enforced by the API, not JSON Schema.
+            language:
+              type: [string, "null"]
+              maxLength: 64
+  responses:
+    ApiError:
+      description: Standard API error envelope.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, retryable, request_id]
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  retryable:
+                    type: boolean
+                  request_id:
+                    type: string
+                  job_id:
+                    type: string
+                    format: uuid
+                  usage_operation_id:
+                    type: string
+                    format: uuid
