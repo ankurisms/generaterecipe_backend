@@ -416,9 +416,9 @@ async function routeRequest(
 		await enforceRateLimit(env.PROCESS_RATE_LIMITER, request);
 		if (!input.transcript) {
 			throw new ApiError(
-				503,
-				"EXTRACTION_NOT_CONFIGURED",
-				"Automatic transcript extraction is not configured. Provide fallback_transcript to generate a recipe.",
+				422,
+				"TRANSCRIPT_REQUIRED",
+				"Paste the video's transcript in fallback_transcript.text, then submit again to generate a recipe.",
 			);
 		}
 
@@ -440,7 +440,7 @@ async function routeRequest(
 				input.transcript,
 				env,
 				fetch,
-				25_000,
+				60_000,
 				{
 					beforeProviderCall: async (
 						_requestBody,

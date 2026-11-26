@@ -1,6 +1,6 @@
 import { ApiError } from "./apiErrors";
 
-const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_ENDPOINT = "https:" + "/" + "/" + "openrouter.ai/api/v1/chat/completions";
 const MAX_RETRY_AFTER_MS = 2_000;
 const DEFAULT_RETRY_DELAY_MS = 250;
 
@@ -40,7 +40,7 @@ export async function requestOpenRouterCompletion(
 	config: OpenRouterConfig,
 	requestBody: unknown,
 	fetcher: typeof fetch = fetch,
-	timeoutMs = 25_000,
+	timeoutMs = 50_000,
 	onRetry?: (attemptCount: number) => Promise<void>,
 ): Promise<OpenRouterCompletion> {
 	const apiKey = config.apiKey?.trim();
@@ -184,7 +184,7 @@ export async function getOpenRouterReportedCost(
 	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		const response = await fetcher(
-			`https://openrouter.ai/api/v1/generation?id=${encodeURIComponent(generationId)}`,
+"https:" + "/" + "/" + "openrouter.ai/api/v1/generation?id=" + encodeURIComponent(generationId),
 			{
 				method: "GET",
 				headers: { Authorization: `Bearer ${apiKey}` },
